@@ -45,7 +45,7 @@ SVM.setC(1.0)
 
 # construct the argument parse and parse the arguments
 ap = argparse.ArgumentParser()
-ap.add_argument("-i", "--image", required=True,
+ap.add_argument("-v", "--video",
 	help="path to the input image")
 ap.add_argument("-w", "--win-stride", type=str, default="(4, 4)",
 	help="window stride")
@@ -73,8 +73,10 @@ hoge.load("C:\devFolder\opencvassProj\SURF_test\OpenCV_test\\x64\Debug\HOGdiverw
 
 #read from the video file
 #cap = cv2.VideoCapture('C:\devFolder\opencvassProj\SURF_test\OpenCV_test\OpenCV_test\outputVideo.mp4')
-cap = cv2.VideoCapture('C:\devFolder\group6789\dataset\dataset\\1\\002.avi')
-image = cv2.imread(args["image"])
+#cap = cv2.VideoCapture('C:\devFolder\group6789\dataset\dataset\\1\\002.avi')
+cap = cv2.VideoCapture(args["video"])
+
+#image = cv2.imread(args["image"])
 start = datetime.datetime.now()
 #(rects, weights) = hog.detectMultiScale(image, winStride=winStride,padding=padding, scale=args["scale"], useMeanshiftGrouping=meanShift)
 #print("[INFO] detection took: {}s".format(
