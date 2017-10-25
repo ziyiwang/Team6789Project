@@ -28,7 +28,118 @@ def get_svm_detector(svm, hog_detector) :
     svidx = np.zeros((256, 256, 1), dtype = "uint8")
     rho = svm.getDecisionFunction(0,alpha, svidx)
 
+# --------------------------------------------Get meanshift window--------------------------------------------- #
 
+def get_window(image):
+
+    kmean_im = kmean_clustering(image)
+    crop_im  = crop_kmean(kmean_im)
+    thresh_im, max_line_row = Thresholding(crop_im)
+    window_im, top_coor, bot_coor = draw_window(thresh_im, max_line_row)
+    cv2.imshow('window_im', window_im)
+    return window_im, top_coor, bot_coor
+
+def kmean_clustering(image):
+
+    Z = image.reshape((-1,3))
+
+    # convert to np.float32
+    Z = np.float32(Z)
+
+    # define criteria, number of clusters(K) and apply kmeans()
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
+    K = 2
+    ret,label,center=cv2.kmeans(Z,K,None,criteria,10,cv2.KMEANS_RANDOM_CENTERS)
+
+    # Now convert back into uint8, and make original image
+    center = np.uint8(center)
+    res = center[label.flatten()]
+    res2 = res.reshape((image.shape))
+    return res2
+
+def crop_kmean(image):
+
+    sz = image.shape
+    height = sz[0]
+    width = sz[1]
+
+    image[0: (int)(height/3),:] = 0;
+    image[(int)(height - height/4) - 40: height,:] = 0;
+    image[:,0: (int)(width/3) + 47] = 0;
+    image[:,(int)(width - width/3) - 10: width] = 0;
+    return image
+
+def Thresholding(image):
+
+    hist,bins = np.histogram(image.flatten(),256,[0,256])
+
+    cdf = hist.cumsum()
+    cdf_normalised = cdf * hist.max() / cdf.max()
+
+    height, width, depth = image.shape
+    # image[0:height, 0:width//4, 0:depth] = 0
+    max_line = 0
+    max_line_row = 0
+    for r in range(0, height):
+      line = 0
+      for c in range(0, width):
+        if (image[r,c,0] < 100 or image[r,c,1] < 110 or image[r,c,2] < 100):
+          # print(image[r,c,:])
+          image[r,c,:] = 0
+        else:
+          image[r,c,:] = 255
+          line += 1
+        if (c == (width - 1)):
+          if(line > max_line):
+            max_line = line
+            max_line_row = r
+            # print(max_line)
+
+    return image, max_line_row
+
+def draw_window(image,max_line_row):
+
+    start_width = 0
+    end_width = 0
+    first_time = 1
+    for c in range(0, width):
+      if(image[max_line_row,c,0] == 255):
+        if(first_time == 1):
+          start_width = c
+          first_time = 0
+      if(image[max_line_row,c,0] == 0):
+        if(first_time == 0):
+          end_width = c
+          first_time = 1
+          break
+
+
+    center_width = start_width + (int)((end_width - start_width)/2)
+    # topleft_col = center_width - 3
+    # topleft_row = max_line_row - 10
+    # botright_col = center_width + 3
+    # botright_row = max_line_row + 10
+
+    topleft_col = center_width - 3
+    topleft_row = max_line_row - 5
+    botright_col = center_width + 3
+    botright_row = max_line_row + 20
+
+    topright_col = center_width + 3
+    topright_row = max_line_row + 5
+    botleft_col = center_width - 3
+    botleft_row = max_line_row -20
+
+    cv2.rectangle(image,(topleft_col,topleft_row),(botright_col,botright_row),(0,255,0),1)
+    cv2.line(image,(start_width,max_line_row),(end_width,max_line_row),(255,0,0),1)
+    cv2.circle(image,(center_width,max_line_row), 2, (0,0,255), -1)
+
+    top_coor = [topleft_col, topleft_row, topright_col, topright_row]
+
+    bot_coor = [botleft_col, botleft_row, botright_col, botright_row]
+
+    return image, top_coor, bot_coor
+# --------------------------------------------------------------------------------------------------------------------------- #
 
 
 SVM = cv2.ml.SVM_create()
@@ -67,9 +178,9 @@ meanShift = True if args["mean_shift"] > 0 else False
 hog = cv2.HOGDescriptor()
 hoge = cv2.HOGDescriptor()
 #hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
-hog.load("C:\devFolder\opencvassProj\SURF_test\OpenCV_test\\x64\Debug\HOGdiver96x160.yml")
+hog.load("HOGdiver96x160.yml")
 # load the image and resize it
-hoge.load("C:\devFolder\opencvassProj\SURF_test\OpenCV_test\\x64\Debug\HOGdiverwaterentry.yml");
+hoge.load("HOGdiverwaterentry.yml");
 
 #read from the video file
 #cap = cv2.VideoCapture('C:\devFolder\opencvassProj\SURF_test\OpenCV_test\OpenCV_test\outputVideo.mp4')
@@ -94,9 +205,14 @@ beginning = length // 4
 ending = length - (length // 2)
 frameTrack = 0
 
+
+entry_first = 1
+start_meanshift = 0
+
 while(cap.isOpened()):
     frameTrack=frameTrack+1
     ret, frame = cap.read()
+    image = frame
     #1st if statement
     if (frameTrack <= beginning):
        # gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -116,9 +232,13 @@ while(cap.isOpened()):
         # draw the original bounding boxes
         for (x, y, w, h) in rects: #detections for jump start
             cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2) # original frame
+            start_meanshift = 1
+            # if(entry_first == 1):
+            #   window_im, top_coor, bot_coor = get_window(image)
+            #   cv2.imshow('window_im', window_im)
+            #   entry_first = 0
             #if whole frame needed for K clustering, use above line image
             cv2.putText(image, "Diver is jumping", (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
-
             croppedimage = image[y:y+h-35,x+w//2:x+w]
             cv2.imshow("cropped",croppedimage)
 
@@ -157,11 +277,21 @@ while(cap.isOpened()):
        cv2.waitKey(0)
     #in the middle here
 
-    else:
+   
+    if(start_meanshift == 1):
+      if(entry_first == 1):
+         window_im, top_coor, bot_coor = get_window(image)
+         entry_first = 0
+         cv2.imshow('window_im', window_im)
 
-        cv2.imshow("Detections", frame)
-        cv2.waitKey(0)
-        # end in the middle
+
+    # else:
+
+    #     cv2.imshow("Detections", frame)
+    #     cv2.waitKey(0)
+    #     # end in the middle
+
+
 
 cap.release()
 #cv2.destroyAllWindows()
